@@ -2,7 +2,7 @@ import pytest
 import subprocess
 from pathlib import Path
 from pkmsync import git_ops
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 
 class TestGitOperator_status():
@@ -76,11 +76,14 @@ class TestGitOperator_check_for_rebase_in_progress():
 
 class TestGitOperator_pull():
     @patch("subprocess.run")
-    def test_pull_raises_on_git_error(self, mock):
-        mock.return_value.returncode=128
+    @patch("pkmsync.git_ops.GitOperator.check_for_rebase_in_progress")
+    def test_pull_raises_on_git_error(self, mock_check_for_rebase_in_progress, mock_subprocess_run):
+        mock_check_for_rebase_in_progress.return_value = False
+        mock_subprocess_run.return_value.returncode=128
         G = git_ops.GitOperator(Path("fake_repo"))
-        with pytest.raises(git_ops.PKMSyncGitOperatorError):
+        with pytest.raises(git_ops.PKMSyncGitOperatorError) as e:
             G.pull()
+        e.match("Encountered error trying to pull and rebase. Command exited with")
 
     @patch("subprocess.run")
     def test_pull_returns_None_on_success(self, mock):
@@ -90,7 +93,7 @@ class TestGitOperator_pull():
 
     @patch("subprocess.run")
     @patch("pkmsync.git_ops.GitOperator.check_for_rebase_in_progress")
-    def test_pull_aborts_rebase_if_rebase_in_progress(self, mock_check_for_rebase_in_progress, mock_subprocess_run):
+    def test_pull_aborts_pull_if_rebase_in_progress(self, mock_check_for_rebase_in_progress, mock_subprocess_run):
         mock_subprocess_run.return_value.returncode=0
         mock_check_for_rebase_in_progress.return_value = True
         G = git_ops.GitOperator(Path("fake_repo"))
@@ -100,23 +103,42 @@ class TestGitOperator_pull():
 
     @patch("subprocess.run")
     @patch("pkmsync.git_ops.GitOperator.check_for_rebase_in_progress")
-    def test_pull_aborts_rebase_if_rebase_finds_conflicts(self, mock_check_for_rebase_in_progress, mock_subprocess_run):
+    @patch("pkmsync.git_ops.GitOperator.abort_rebase")
+    def test_pull_aborts_pull_if_rebase_finds_conflicts(self, mock_abort_rebase, mock_check_for_rebase_in_progress, mock_subprocess_run):
         mock_subprocess_run.return_value.returncode=1
-        mock_check_for_rebase_in_progress.return_value = False
+        mock_check_for_rebase_in_progress.side_effect = [False, True]
         G = git_ops.GitOperator(Path("fake_repo"))
         with pytest.raises(git_ops.PKMSyncGitOperatorError) as e:
             G.pull()
-        assert e.match("Encountered error trying to pull and rebase. Command exited with")
+        e.match("Encountered error trying to pull and rebase.")
+        mock_abort_rebase.assert_called_once()
 
     @patch("subprocess.run")
-    def test_pull_aborts_rebase_if_rebase_finds_conflicts_and_raises_if_abort_fails(self, mock_subprocess_run):
+    def test_pull_aborts_pull_if_rebase_finds_conflicts_and_raises_if_abort_fails(self, mock_subprocess_run):
             mock_subprocess_run.return_value.returncode= 1
             with patch('pkmsync.git_ops.GitOperator.check_for_rebase_in_progress') as mock_check_for_rebase_in_progress:
                 mock_check_for_rebase_in_progress.side_effect = [False,True]
                 G = git_ops.GitOperator(Path("fake_repo"))
                 with pytest.raises(git_ops.PKMSyncGitOperatorError) as e:
                     G.pull()
-                assert e.match("Encountered error trying to abort pull and rebase. Command exited with")
+                assert e.match("Encountered error trying to abort rebase. Command exited with")
+
+class TestGitOperator_abort():
+    @patch("subprocess.run")
+    def test_git_abort_rebase_raises_on_error(self, mock):
+        mock.return_value.returncode=128
+        G = git_ops.GitOperator(Path("fake_repo"))
+        with pytest.raises(git_ops.PKMSyncGitOperatorError) as e:
+            G.abort_rebase()
+        assert e.match("Encountered error trying to abort rebase. Command exited with")
+
+    @patch("subprocess.run")
+    def test_git_abort_rebase_calls_rebase_abort(self, mock):
+        mock.return_value.returncode=0
+        G = git_ops.GitOperator(Path("fake_repo"))
+        G.abort_rebase()
+        mock.assert_called_once()
+        mock.assert_called_with(["git", "-C", Path("fake_repo"), "rebase", "--abort"], capture_output=True, text=True)
 
 
 class TestGitOperator_commit():
@@ -134,6 +156,7 @@ class TestGitOperator_commit():
         G = git_ops.GitOperator(Path("fake_repo"))
         assert G.commit("should return None") is None
         mock.assert_called_with(["git", "-C", Path("fake_repo"), "commit", "-m", "should return None"], capture_output=True, text=True)
+
 
 class TestGitOperator_push():
     @patch("subprocess.run")

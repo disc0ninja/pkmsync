@@ -13,6 +13,11 @@ class GitOperator():
     vault_path: Path
     branch: str="main"
 
+    def abort_rebase(self):
+        s = subprocess.run(["git", "-C", self.vault_path, "rebase", "--abort"], capture_output=True, text=True)
+        if s.returncode != 0:
+            raise PKMSyncGitOperatorError(f"Encountered error trying to abort rebase. Command exited with {s.returncode}\n{s.stderr}")
+
     def status(self) -> int:
         """
         Gets the git repo status and returns an integer corresponding to the status.
@@ -59,9 +64,7 @@ class GitOperator():
         s = subprocess.run(["git", "-C", self.vault_path, "pull", "--rebase", "origin", self.branch], capture_output=True, text=True)
         if int(s.returncode) != 0:
             if self.check_for_rebase_in_progress():
-                abort = subprocess.run(["git", "-C", self.vault_path, "rebase", "--abort"], capture_output=True, text=True)
-                if abort.returncode != 0:
-                    raise PKMSyncGitOperatorError(f"Encountered error trying to abort pull and rebase. Command exited with {abort.returncode}\n{abort.stderr}")
+                self.abort_rebase()
             raise PKMSyncGitOperatorError(f"Encountered error trying to pull and rebase. Command exited with {s.returncode}\n{s.stderr}")
 
     def stage(self):

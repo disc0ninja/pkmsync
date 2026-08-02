@@ -28,61 +28,51 @@ def test_PKMSyncConfig_expand_raises_when_unable_to_expand_var(monkeypatch):
     with pytest.raises(config.PKMSyncConfigError):
             config.PKMSyncConfig._expand("$UNSET_VAR/testing")
 
+# def test_PKMSyncConfig_validate_tz
+def test_PKMSyncConfig_validate_tz_raises_on_invalid_tz():
+    tz="NOT_A_VALID_TIMEZONE"
+    with pytest.raises(config.PKMSyncConfigError) as e:
+        config.PKMSyncConfig._validate_tz(tz)
+    e.match(f"Encountered error validating timezone in config. {tz} was not found in zoneinfo.available_timezones()")
 
-test_defaults_toml_data = b"""
-device_id="testdevice123"
-remote_url="ssh://fake.git/testing/test"
-vault_path="$TEST_HOME/.pkms-test"
-"""
 
-@patch("builtins.open", new_callable=mock_open, read_data=test_defaults_toml_data)
-def test_load_config_succeeds_with_default_log_path_and_branch(mock_file, monkeypatch):
+def test_load_config_succeeds_with_default_log_path_and_branch(tmp_path, monkeypatch):
+    test_defaults_toml_data = """
+    device_id="testdevice123"
+    remote_url="ssh://fake.git/testing/test"
+    vault_path="$TEST_HOME/.pkms-test"
+    """
+    d = tmp_path
+    p = d / "test.toml"
+    p.write_text(test_defaults_toml_data)
     monkeypatch.setenv("TEST_HOME", "/tmp/fake/home")
     monkeypatch.setenv("XDG_STATE_HOME", "/tmp/fake/xdg_home")
-    C = config.load_config('test.toml')
-    mock_file.assert_called_with('test.toml', 'rb')
+    C = config.load_config(p)
     assert C.branch == "main"
     assert C.device_id == "testdevice123"
     assert C.remote_url == "ssh://fake.git/testing/test"
     assert C.vault_path == Path("/tmp/fake/home/.pkms-test")
     assert C.log_path == Path("/tmp/fake/xdg_home/pkmsync/pkmsync.log")
-
-test_complete_toml_data = b"""
-device_id="testdevice123"
-remote_url="ssh://fake.git/testing/test"
-vault_path="$TEST_HOME/.pkms-test"
-branch="mybranch"
-log_path="mylogs"
-"""
-
-@patch("builtins.open", new_callable=mock_open, read_data=test_complete_toml_data)
-def test_load_config_succeeds_with_all_settings(mock_file, monkeypatch):
-    monkeypatch.setenv("TEST_HOME", "/tmp/fake/home")
-    C = config.load_config('test.toml')
-    mock_file.assert_called_with('test.toml', 'rb')
-    assert C.branch == "mybranch"
-    assert C.device_id == "testdevice123"
-    assert C.remote_url == "ssh://fake.git/testing/test"
-    assert C.vault_path == Path("/tmp/fake/home/.pkms-test")
-    assert C.log_path == Path("mylogs")
+    assert C.timezone == "America/Chicago"
 
 
-def test_load_config_reads_real_file(tmp_path, monkeypatch):
-    monkeypatch.setenv("TEST_HOME", "/tmp/fake/home")
-    toml_data = """
+def test_load_config_succeeds_with_all_settings(tmp_path, monkeypatch):
+    test_complete_toml_data = """
     device_id="testdevice123"
     remote_url="ssh://fake.git/testing/test"
     vault_path="$TEST_HOME/.pkms-test"
     branch="mybranch"
     log_path="mylogs"
+    timezone="America/Chicago"
     """
     d = tmp_path
-    p = d / "test_conf.toml"
-    p.write_text(toml_data)
-
+    p = d / "test.toml"
+    p.write_text(test_complete_toml_data)
+    monkeypatch.setenv("TEST_HOME", "/tmp/fake/home")
     C = config.load_config(p)
     assert C.branch == "mybranch"
     assert C.device_id == "testdevice123"
     assert C.remote_url == "ssh://fake.git/testing/test"
     assert C.vault_path == Path("/tmp/fake/home/.pkms-test")
     assert C.log_path == Path("mylogs")
+    assert C.timezone == "America/Chicago"

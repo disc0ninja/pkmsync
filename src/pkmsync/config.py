@@ -3,6 +3,7 @@ import tomllib
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from zoneinfo import available_timezones
 
 class PKMSyncConfigError(Exception):
     pass
@@ -14,10 +15,19 @@ class PKMSyncConfig:
     vault_path: Path | str
     branch: str="main"
     log_path: Path | str="$XDG_STATE_HOME/pkmsync/pkmsync.log"
+    timezone: str="America/Chicago"
 
     def __post_init__(self):
         self.log_path = self._expand(self.log_path)
         self.vault_path = self._expand(self.vault_path)
+        self.timezone = self._validate_tz(self.timezone)
+
+    @staticmethod
+    def _validate_tz(tz: str)  -> str:
+        if tz in available_timezones():
+            return tz
+        else:
+            raise PKMSyncConfigError(f"Encountered error validating timezone in config. {tz} was not found in zoneinfo.available_timezones()")
 
     @staticmethod
     def _expand(raw: Path | str) -> Path:
@@ -37,5 +47,6 @@ def load_config(path: str | Path) ->PKMSyncConfig:
                 data['remote_url'],
                 data['vault_path'],
                 data.get('branch', 'main'),
-                data.get('log_path', '$XDG_STATE_HOME/pkmsync/pkmsync.log')
+                data.get('log_path', '$XDG_STATE_HOME/pkmsync/pkmsync.log'),
+                data.get('timezone', "America/Chicago")
             )
