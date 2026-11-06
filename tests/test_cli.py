@@ -92,3 +92,19 @@ def test_cli_exits_0_when_sync_succeeds(mock_sync, mock_load_config, mock_get_co
     expected = 0
     actual = cli()
     assert actual == expected
+
+@patch("argparse.ArgumentParser")
+@patch("pkmsync.cli.get_config_path")
+@patch("pkmsync.cli.load_config")
+@patch("pkmsync.cli.sync")
+def test_cli_logs_to_file(mock_sync, mock_load_config, mock_get_config_path, _mock_argparser, tmp_path):
+    expected = "test logging to file"
+    def test_log(_):
+        logging.getLogger("pkmsync.sync").warning(expected)
+
+    mock_get_config_path.return_value = "test_path"
+    mock_load_config.return_value.log_path = tmp_path / "test_logfile"
+    mock_sync.side_effect = test_log
+    cli()
+    actual = (tmp_path / "test_logfile").read_text()
+    assert expected in actual

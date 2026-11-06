@@ -6,6 +6,7 @@ from pathlib import Path
 from pkmsync.config import load_config
 from pkmsync.sync import sync
 
+FORMAT =  "%(asctime)s %(levelname)s %(name)s: %(message)s"
 logger = logging.getLogger(__name__)
 
 def get_config_path(cfg: str|Path|None) -> str|Path|None:
@@ -22,7 +23,7 @@ def get_config_path(cfg: str|Path|None) -> str|Path|None:
         return cfg
 
 def main() -> int:
-    logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+    logging.basicConfig(format=FORMAT, stream=sys.stderr, level=logging.INFO)
     parser = argparse.ArgumentParser("pkmsync")
     parser.add_argument("--config", "-c", help="path to toml config that will be used")
     args = parser.parse_args()
@@ -33,7 +34,10 @@ def main() -> int:
     c = load_config(cfg)
     log_path = c.log_path
     Path(log_path).parent.mkdir(parents=True, exist_ok=True)
-    logger.addHandler(logging.FileHandler(log_path))
+    fh = logging.FileHandler(log_path)
+    fh.setFormatter(logging.Formatter(FORMAT))
+    logging.getLogger("pkmsync").addHandler(fh)
+
     logger.info(f"Successfully loaded config from {cfg}.")
     logger.info("Starting sync")
     try:
@@ -41,7 +45,7 @@ def main() -> int:
         logger.info("Finished sync")
         return 0
     except Exception as e:
-        logger.error(f"Encountered an unexpected exception running sync {e}")
+        logger.exception(f"Encountered an unexpected exception running sync {e}")
         return 1
 
 if __name__ == "__main__":
