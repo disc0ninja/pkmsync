@@ -10,6 +10,14 @@ from unittest.mock import patch, Mock
 
 from pkmsync.git_ops import PKMSyncGitOperatorError
 
+@pytest.fixture(autouse=True)
+def remove_log_handlers():
+    yield
+    log = logging.getLogger("pkmsync")
+    for h in list(log.handlers):
+        log.removeHandler(h)
+        h.close()
+
 def test_get_config_path_returns_passed_config_path_if_passed_config(tmp_path):
     cfg_path = tmp_path / "test_config.toml"
     actual = get_config_path(cfg_path)
